@@ -7,6 +7,7 @@
 测试样例取自 GENCODE v50 人类蛋白(INS/HBB/EPO)。
 """
 
+import logging
 import time
 from pathlib import Path
 
@@ -18,6 +19,22 @@ from CodonTransformer.CodonData import get_amino_acid_sequence
 from CodonTransformer.CodonEvaluation import get_GC_content
 from CodonTransformer.CodonPrediction import predict_dna_sequence
 from CodonTransformer.CodonUtils import ORGANISM2ID, DNASequencePrediction
+
+
+class _DropGenerativeCapabilityWarning(logging.Filter):
+    """丢弃 transformers 的 "has generative capabilities" 误报。
+
+    transformers>=4.50 将 BigBirdForMaskedLM 移出 GenerationMixin(失去 .generate),
+    且模型加载期间 can_generate() 被调用多次、每次都重复打印该警告。本应用解码
+    走 predict_dna_sequence 的单次 MLM forward,不调 .generate(),与该提示无关,
+    故按消息内容精确过滤,不影响 transformers 的其他警告。
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "has generative capabilities" not in record.getMessage()
+
+
+logging.getLogger("transformers.modeling_utils").addFilter(_DropGenerativeCapabilityWarning())
 
 MODEL_DIR = Path(__file__).resolve().parent / "data"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

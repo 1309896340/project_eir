@@ -7,6 +7,7 @@
 输出为 DNA(T),同时按项目约定给出 RNA(U)版本。
 """
 
+import logging
 from pathlib import Path
 
 import torch
@@ -15,6 +16,16 @@ from transformers import AutoTokenizer, BigBirdForMaskedLM
 from CodonTransformer.CodonData import get_amino_acid_sequence
 from CodonTransformer.CodonEvaluation import get_GC_content
 from CodonTransformer.CodonPrediction import predict_dna_sequence
+
+
+class _DropGenerativeCapabilityWarning(logging.Filter):
+    """丢弃 transformers 的 "has generative capabilities" 误报(详见 codontransformer_app.py)。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "has generative capabilities" not in record.getMessage()
+
+
+logging.getLogger("transformers.modeling_utils").addFilter(_DropGenerativeCapabilityWarning())
 
 PROTEIN = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLA"
 ORGANISM = "Homo sapiens"
