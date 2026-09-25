@@ -273,13 +273,14 @@ async function loadTrajectoryIntoViewer(topologyUrl, dcdUrl) {
   } catch (e) {
     console.warn("网格参照加载失败:", e);
   }
-  // 相机适配结构并自适应画布尺寸,pivot 落在第 0 帧几何中心
+  // 相机适配结构并自适应画布尺寸;fit 拉近到恰好容纳蛋白
+  // (camera.reset 会连网格一起框进去导致过远,fit 覆盖之)
   setTimeout(() => {
     try {
       state.viewer.handleResize();
       if (state.plugin.managers.camera) state.plugin.managers.camera.reset();
     } catch (e) { /* 相机复位失败不影响功能 */ }
-    recenterCameraOnFrame();
+    fitCameraOnFrame();
   }, 300);
 }
 
@@ -360,10 +361,9 @@ $("style-sel").onchange = async (e) => {
 
 // ---------------- 逐帧几何中心与相机跟随 ----------------
 
-function currentStructureCenter() {
-  // 取蛋白结构(排除网格参照物)的包围球中心,即当前帧的几何中心。
-  // 判据:原子数最多的结构即蛋白(网格仅数百个参考点);gridStructureRef
-  // 的 hierarchy 识别存在异步时序问题,只作日志参考。
+function currentStructureBounds() {
+  // 取蛋白结构(排除网格参照物)的包围球;判据:原子数最多的结构即蛋白
+  // (网格仅数百个参考点)。
   const structs = state.plugin.managers.structure.hierarchy.current.structures;
   let target = null, best = -1;
   for (const s of structs) {
@@ -374,8 +374,49 @@ function currentStructureCenter() {
   if (!target) return null;
   const data = target.cell.obj && target.cell.obj.data;
   if (!data || !data.boundary) return null;
-  const c = data.boundary.sphere.center;
-  return [c[0], c[1], c[2]];
+  const sph = data.boundary.sphere;
+  return { center: [sph.center[0], sph.center[1], sph.center[2]], radius: sph.radius };
+}
+
+function currentStructureCenter() {
+  const b = currentStructureBounds();
+  return b ? b.center : null;
+}
+
+function fitCameraOnFrame(margin = 1.12) {
+  // 视角拉近到正好完整容纳当前帧结构(包围球拟合)。
+  // Mol* 默认正交相机:视觉缩放由 snapshot.radius(可视半径)控制,
+  // 距离不改变大小;透视模式才按 fov(弧度)计算所需距离。
+  const b = currentStructureBounds();
+  if (!b) return;
+  const c3d = state.plugin.canvas3d;
+  if (!c3d) return;
+  const cam = c3d.camera;
+  const snap = cam.getSnapshot();
+  const [tx, ty, tz] = snap.target;
+  const dx = b.center[0] - tx, dy = b.center[1] - ty, dz = b.center[2] - tz;
+  const [px, py, pz] = snap.position;
+  snap.target = b.center.slice();
+
+  if (snap.mode === "perspective") {
+    const canvas = getRenderCanvas();
+    const aspect = canvas && canvas.height > 0 ? canvas.width / canvas.height : 1;
+    const vFov = snap.fov;  // 弧度
+    const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
+    const theta = Math.min(vFov, hFov);
+    const dist = (b.radius * margin) / Math.sin(theta / 2);
+    const len = Math.hypot(px - tx, py - ty, pz - tz) || 1;
+    const ux = (px - tx) / len, uy = (py - ty) / len, uz = (pz - tz) / len;
+    snap.position = [
+      b.center[0] + ux * dist, b.center[1] + uy * dist, b.center[2] + uz * dist,
+    ];
+  } else {
+    // 正交:平移相机保持相对朝向,radius 决定可视范围
+    snap.position = [px + dx, py + dy, pz + dz];
+  }
+  snap.radius = Math.max(b.radius * margin, 1);  // 近/远裁剪与雾效随之适配
+  cam.setState(snap);
+  c3d.requestDraw();
 }
 
 function recenterCameraOnFrame() {
@@ -457,13 +498,13 @@ async function loadOriginGrid() {
 }
 
 
-// 重置视图:复位相机并重新居中到当前帧
+// 重置视图:复位相机朝向后拉近到恰好完整容纳当前帧结构
 $("reset-btn").onclick = () => {
   try {
     state.viewer.handleResize();
     if (state.plugin.managers.camera) state.plugin.managers.camera.reset();
-  } catch (e) { /* 相机复位失败不影响后续居中 */ }
-  setTimeout(recenterCameraOnFrame, 250);  // 等 reset 过渡完成后落回当前帧中心
+  } catch (e) { /* 相机复位失败不影响后续拟合 */ }
+  setTimeout(fitCameraOnFrame, 250);  // 等 reset 过渡完成后再拟合
 };
 
 
@@ -552,7 +593,7 @@ async function exportVideo() {
       chunks.length = 0;
       try { rec.stop(); } catch (e) { /* 忽略中止异常 */ }
     }
-    setFrame(startFrame);
+    setFrame(startFrame).then(() => fitCameraOnFrame());
   };
 
   rec.start();
@@ -562,6 +603,7 @@ async function exportVideo() {
     for (let i = 0; i < N; i++) {
       if (state.exportAbort) { finish(false); return; }
       await setFrame(i);
+      fitCameraOnFrame();  // 每帧拉近到恰好完整容纳当前构象,折叠细节可见
       state.plugin.canvas3d.requestDraw();
       await nextPaint();
       track.requestFrame();  // 恰好一帧
