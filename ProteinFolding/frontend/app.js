@@ -280,7 +280,7 @@ async function setFrame(i) {
   const b = d.build().to(cell).update(params);
   await state.plugin.runTask(d.updateTree(b));
   updateFrameLabel();
-  if (!state.playing) $("frame-slider").value = i;
+  $("frame-slider").value = i;
 }
 
 function updateFrameLabel() {
@@ -347,9 +347,18 @@ $("export-btn").onclick = () => {
   startRecording();
 };
 
+function getRenderCanvas() {
+  // Mol* 5.11 的 canvas 挂在 canvas3d.webgl.gl.canvas 上;DOM 查询作回退
+  const c3d = state.plugin && state.plugin.canvas3d;
+  const viaPlugin = c3d && c3d.webgl && c3d.webgl.gl && c3d.webgl.gl.canvas;
+  return viaPlugin instanceof HTMLCanvasElement
+    ? viaPlugin
+    : document.querySelector("#viewport canvas");
+}
+
 function startRecording() {
-  const canvas = state.plugin.canvas3d && state.plugin.canvas3d.canvas;
-  if (!canvas || !canvas.captureStream) {
+  const canvas = getRenderCanvas();
+  if (!canvas || !canvas.captureStream || typeof MediaRecorder === "undefined") {
     alert("当前浏览器不支持画布录制(MediaRecorder/captureStream)");
     return;
   }
@@ -396,6 +405,7 @@ $("fasta-file").addEventListener("change", (e) => {
 $("run-btn").onclick = submitJob;
 
 (async () => {
+  updateCount();  // 输入框默认填有 INS 测试样例,初始化字数
   await Promise.all([loadSystemInfo(), loadSamplesAndPresets()]);
   try {
     await initViewer();
