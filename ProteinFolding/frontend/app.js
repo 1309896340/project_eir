@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   viewer: null,
   plugin: null,
-  frameCell: null,      // 带有 frameIndex 参数的状态节点
+  frameCell: null,      // 带有 modelIndex 参数的状态节点
   frameCount: 0,
   currentFrame: 0,
   playing: false,
@@ -14,6 +14,9 @@ const state = {
   key: null,
   meta: null,
   recording: null,      // MediaRecorder 会话
+  frameCenters: [],     // 每帧几何中心缓存(轨迹坐标)
+  gridReprRefs: null,   // 网格结构的 representation refs(样式切换时跳过)
+  gridStructureRef: null, // 网格结构在 hierarchy 中的 cell ref(中心计算时跳过)
 };
 
 // ---------------- 初始化 ----------------
@@ -261,12 +264,21 @@ async function loadTrajectoryIntoViewer(topologyUrl, dcdUrl) {
   updateFrameLabel();
   state.playing = false;
   $("play-btn").textContent = "▶";
-  // 相机适配结构并自适应画布尺寸
+  // 原点网格参照(每次加载轨迹后重建——开头 clear() 会连网格一起清掉)
+  state.gridStructureRef = null;
+  state.gridReprRefs = null;
+  try {
+    await loadOriginGrid();
+  } catch (e) {
+    console.warn("网格参照加载失败:", e);
+  }
+  // 相机适配结构并自适应画布尺寸,pivot 落在第 0 帧几何中心
   setTimeout(() => {
     try {
       state.viewer.handleResize();
       if (state.plugin.managers.camera) state.plugin.managers.camera.reset();
     } catch (e) { /* 相机复位失败不影响功能 */ }
+    recenterCameraOnFrame();
   }, 300);
 }
 
@@ -281,6 +293,7 @@ async function setFrame(i) {
   await state.plugin.runTask(d.updateTree(b));
   updateFrameLabel();
   $("frame-slider").value = i;
+  recenterCameraOnFrame();  // 相机 pivot 跟随当前帧几何中心
 }
 
 function updateFrameLabel() {
@@ -322,7 +335,7 @@ $("frame-slider").oninput = (e) => {
   setFrame(Number(e.target.value));
 };
 
-// 显示样式切换
+// 显示样式切换(网格参照的 point 表示保持不变)
 $("style-sel").onchange = async (e) => {
   const kind = e.target.value;
   const plugin = state.plugin;
@@ -331,16 +344,125 @@ $("style-sel").onchange = async (e) => {
     if (cell.obj && cell.obj.type && cell.obj.type.name === "representation") reprCells.push(cell);
   });
   for (const cell of reprCells) {
+    if (state.gridReprRefs && state.gridReprRefs.has(cell.transform.ref)) continue;
     const params = JSON.parse(JSON.stringify(cell.transform.params));
     if (params && params.type) {
       params.type.name = kind;
       params.type.params = params.type.params || {};
-      await plugin.state.data.update(cell.transform.ref, params);
+      const b = plugin.state.data.build().to(cell).update(params);
+      await plugin.runTask(plugin.state.data.updateTree(b));
     }
   }
 };
 
-// ---------------- webm 视频导出(手动触发) ----------------
+// ---------------- 逐帧几何中心与相机跟随 ----------------
+
+function currentStructureCenter() {
+  // 取蛋白结构(排除网格参照物)的包围球中心,即当前帧的几何中心。
+  // 判据:原子数最多的结构即蛋白(网格仅数百个参考点);gridStructureRef
+  // 的 hierarchy 识别存在异步时序问题,只作日志参考。
+  const structs = state.plugin.managers.structure.hierarchy.current.structures;
+  let target = null, best = -1;
+  for (const s of structs) {
+    const d = s.cell.obj && s.cell.obj.data;
+    const n = d && typeof d.elementCount === "number" ? d.elementCount : 0;
+    if (n > best) { best = n; target = s; }
+  }
+  if (!target) return null;
+  const data = target.cell.obj && target.cell.obj.data;
+  if (!data || !data.boundary) return null;
+  const c = data.boundary.sphere.center;
+  return [c[0], c[1], c[2]];
+}
+
+function recenterCameraOnFrame() {
+  // 把相机 target 平移到当前帧几何中心(position 同步平移,视角/缩放不变):
+  // 之后鼠标旋转始终围绕当前帧中心,折叠漂移不会被视锥体裁剪
+  const center = currentStructureCenter();
+  if (!center) return;
+  state.frameCenters[state.currentFrame] = center;
+  const c3d = state.plugin.canvas3d;
+  if (!c3d) return;
+  const cam = c3d.camera;
+  const snap = cam.getSnapshot();
+  const [tx, ty, tz] = snap.target;
+  const dx = center[0] - tx, dy = center[1] - ty, dz = center[2] - tz;
+  if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 1e-4) return;
+  const [px, py, pz] = snap.position;
+  snap.target = center.slice();
+  snap.position = [px + dx, py + dy, pz + dz];
+  cam.setState(snap);
+  c3d.requestDraw();
+}
+
+// ---------------- 原点网格参照 ----------------
+
+function buildGridPdb(spacing = 10, half = 100) {
+  // xz 平面(y=0)点阵网格 + 原点标记(N 原子,默认元素着色为蓝)
+  const lines = [];
+  let serial = 1;
+  const het = (elem, resname, x, y, z) =>
+    `HETATM${String(serial++).padStart(5)}  ${elem.padEnd(2)}  ${resname} A   1    ` +
+    `${x.toFixed(3).padStart(8)}${y.toFixed(3).padStart(8)}${z.toFixed(3).padStart(8)}` +
+    `  1.00  0.00          ${elem.padStart(2)}`;
+  for (let x = -half; x <= half + 1e-6; x += spacing) {
+    for (let z = -half; z <= half + 1e-6; z += spacing) {
+      lines.push(het("C", "GRD", x, 0, z));
+    }
+  }
+  lines.push(het("N", "ORG", 0, 0, 0));  // 原点标记
+  lines.push("END");
+  return lines.join("\n");
+}
+
+async function loadOriginGrid() {
+  // 网格作为独立结构加载,用 point 表示渲染;以加载前后差集识别网格子树
+  // (Mol* 的 cell ref 为随机 ID,无法按前缀归属),记录 refs 供
+  // 样式切换与中心计算排除
+  const plugin = state.plugin;
+  const structsBefore = new Set(
+    plugin.managers.structure.hierarchy.current.structures.map((s) => s.cell.ref)
+  );
+  const cellsBefore = new Set();
+  plugin.state.data.cells.forEach((_, key) => cellsBefore.add(String(key)));
+
+  await state.viewer.loadStructureFromData(buildGridPdb(), "pdb");
+
+  // hierarchy 行为是异步刷新的,轮询等待网格结构出现(最多 ~2s)
+  let gridStruct = null;
+  for (let i = 0; i < 20 && !gridStruct; i++) {
+    const cur = plugin.managers.structure.hierarchy.current.structures;
+    gridStruct = cur.find((s) => !structsBefore.has(s.cell.ref));
+    if (!gridStruct) await new Promise((r) => setTimeout(r, 100));
+  }
+  state.gridStructureRef = gridStruct ? gridStruct.cell.ref : null;
+
+  state.gridReprRefs = new Set();
+  const newReprs = [];
+  plugin.state.data.cells.forEach((cell, key) => {
+    if (cellsBefore.has(String(key))) return;
+    const t = cell.obj && cell.obj.type && cell.obj.type.name;
+    if (t === "Structure 3D") newReprs.push(cell);
+  });
+  for (const cell of newReprs) {
+    state.gridReprRefs.add(cell.transform.ref);
+    const params = JSON.parse(JSON.stringify(cell.transform.params || {}));
+    params.type = { name: "point", params: {} };
+    const b = plugin.state.data.build().to(cell).update(params);
+    await plugin.runTask(plugin.state.data.updateTree(b));
+  }
+}
+
+
+// 重置视图:复位相机并重新居中到当前帧
+$("reset-btn").onclick = () => {
+  try {
+    state.viewer.handleResize();
+    if (state.plugin.managers.camera) state.plugin.managers.camera.reset();
+  } catch (e) { /* 相机复位失败不影响后续居中 */ }
+  setTimeout(recenterCameraOnFrame, 250);  // 等 reset 过渡完成后落回当前帧中心
+};
+
 
 $("export-btn").onclick = () => {
   if (state.recording) { stopRecording(); return; }
