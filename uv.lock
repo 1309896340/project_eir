@@ -1900,6 +1900,16 @@ wheels = [
 ]
 
 [[package]]
+name = "pdbfixer"
+version = "1.12.0"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
+dependencies = [
+    { name = "numpy" },
+    { name = "openmm" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/da/bd/394c3185e4b9fbacf803651a374e99e597d3411d316784f8ea6d8fc17af5/pdbfixer-1.12.0.tar.gz", hash = "sha256:82e54074b33eb00270e9a439c8633fcf82cd3ab7a36561b01425a260c0fc4143" }
+
+[[package]]
 name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
@@ -2420,6 +2430,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "gradio" },
     { name = "openmm" },
+    { name = "pdbfixer" },
     { name = "pytest" },
     { name = "python-multipart" },
     { name = "torch" },
@@ -2439,6 +2450,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "gradio", specifier = ">=6.17.3" },
     { name = "openmm", specifier = ">=8.6.1" },
+    { name = "pdbfixer", specifier = ">=1.12.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "torch", specifier = ">=2.12.1,<3.0" },

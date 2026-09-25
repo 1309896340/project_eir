@@ -90,23 +90,23 @@ class ESM3LocalPredictor(StructurePredictor):
 
     def predict_pdb(self, sequence: str) -> str:
         import torch
-        from esm.sdk.api import ESMProtein, SamplingConfig, SamplingTrackConfig
+        from esm.sdk.api import ESMProtein
+        from esm.sdk.api import GenerationConfig
 
         model, device = _load_model()
         protein = ESMProtein(sequence=sequence)
-        config = SamplingConfig(
-            structure=SamplingTrackConfig(temperature=0.0),
-            return_per_residue_embeddings=False,
-        )
+        # esm 3.2.3 本地 generate 走 GenerationConfig(SamplingConfig 是 Forge
+        # 远端专用,本地路径会因缺 condition_on_coordinates_only 属性崩溃);
+        # track="structure" 即折叠,temperature=0 确定性解码
+        config = GenerationConfig(track="structure", temperature=0.0)
         logger.info("ESM3 结构预测开始 (%d aa, device=%s)", len(sequence), device)
         try:
             with torch.no_grad():
-                # SDK 的 generate 注解只写了 GenerationConfig,但 ESMProtein
-                # 输入在运行时分发到 iterative_sampling_raw,接受 SamplingConfig
-                # (官方示例的标准用法)。
-                output = model.generate(  # pyright: ignore[reportArgumentType]
+                # SDK 注解只写了 GenerationConfig,但 ESMProtein 输入在
+                # 运行时分发到 iterative_sampling_raw(官方示例的标准用法)
+                output = model.generate(
                     protein,
-                    config,  # pyright: ignore[reportArgumentType]
+                    config,
                 )
         except RuntimeError as exc:
             raise PredictionError(f"ESM3 生成失败: {exc}") from exc

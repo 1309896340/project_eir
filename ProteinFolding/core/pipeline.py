@@ -9,6 +9,7 @@ from typing import Any
 from .cache import cache_key, find_cached, new_cache_dir
 from .config import SimParams
 from .linear import make_linear_pdb
+from .pdbfix import ensure_sidechains
 from .predictors.base import predict_with_fallback
 from .simulation import run_targeted_md
 
@@ -75,6 +76,8 @@ def run_pipeline(
         native_pdb, predictor = predict_with_fallback(sequence)
         predictor_name = predictor.name
         report("predict", 0.30, f"结构预测完成({predictor.name})")
+    # ESM3 可能输出主链-only(缺失原子 inf 标记),用 PDBFixer 重建侧链
+    native_pdb = ensure_sidechains(native_pdb)
     (work / "native.pdb").write_text(native_pdb, encoding="ascii", newline="\n")
 
     # ---- 2. 线性链 ----
