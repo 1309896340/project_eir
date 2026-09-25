@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProteinFolding · 蛋白质折叠动画</title>
+  <link rel="stylesheet" href="/vendor/molstar/molstar.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>ProteinFolding</h1>
+    <div class="subtitle">氨基酸序列 → 结构预测 → 物理引导折叠 → 3D 动画</div>
+    <div id="sysinfo" class="sysinfo">正在加载系统信息…</div>
+  </header>
+
+  <main>
+    <aside id="sidebar">
+      <section class="card">
+        <h2>1 · 输入氨基酸序列</h2>
+        <textarea id="sequence" rows="7" spellcheck="false"
+          placeholder="粘贴氨基酸序列(20~400 aa,标准残基),或上传 FASTA"></textarea>
+        <div class="row">
+          <label class="btn-small"><input type="file" id="fasta-file" accept=".fa,.fasta,.txt" hidden>上传 FASTA</label>
+          <span id="seq-count" class="muted">0 aa</span>
+        </div>
+        <div class="row" id="sample-btns"></div>
+      </section>
+
+      <section class="card">
+        <h2>2 · 模拟设置</h2>
+        <div class="row">
+          <label>预设档位</label>
+          <div class="seg" id="preset-seg"></div>
+        </div>
+        <details id="advanced">
+          <summary>高级参数 / 平台</summary>
+          <div class="grid2">
+            <label>引导步数<input id="p-guide" type="number" placeholder="默认"></label>
+            <label>松弛步数<input id="p-relax" type="number" placeholder="默认"></label>
+            <label>总帧数<input id="p-frames" type="number" placeholder="默认"></label>
+            <label>力常数 k<input id="p-kmax" type="number" placeholder="默认"></label>
+            <label>温度 K<input id="p-temp" type="number" placeholder="默认"></label>
+            <label>计算平台
+              <select id="p-platform"><option value="auto">自动检测</option></select>
+            </label>
+          </div>
+          <label class="chk"><input id="p-force" type="checkbox">强制重算(忽略缓存)</label>
+        </details>
+        <button id="run-btn" class="btn-primary">生成折叠动画</button>
+        <div id="progress-wrap" hidden>
+          <div class="progress-track"><div id="progress-bar"></div></div>
+          <div id="progress-msg" class="muted"></div>
+        </div>
+        <div id="error-box" class="error-box" hidden></div>
+      </section>
+
+      <section class="card" id="result-card" hidden>
+        <h2>3 · 结果</h2>
+        <div id="result-meta" class="meta"></div>
+        <canvas id="rmsd-chart" width="268" height="72"></canvas>
+        <div class="row wrap" id="downloads">
+          <a class="btn-small" id="dl-native" download>native.pdb</a>
+          <a class="btn-small" id="dl-linear" download>linear.pdb</a>
+          <a class="btn-small" id="dl-dcd" download>trajectory.dcd</a>
+          <a class="btn-small" id="dl-meta" download>meta.json</a>
+        </div>
+      </section>
+    </aside>
+
+    <section id="viewport-wrap">
+      <div id="viewport"></div>
+      <div id="player" hidden>
+        <button id="play-btn" class="player-btn" title="播放/暂停">▶</button>
+        <input id="frame-slider" type="range" min="0" max="0" value="0" step="1">
+        <span id="frame-label" class="frame-label">0 / 0</span>
+        <select id="speed-sel" title="播放速度">
+          <option value="30">30 帧/秒</option>
+          <option value="15" selected>15 帧/秒</option>
+          <option value="8">8 帧/秒</option>
+          <option value="4">4 帧/秒</option>
+        </select>
+        <select id="style-sel" title="显示样式">
+          <option value="cartoon">卡通模型</option>
+          <option value="ball-and-stick">球棍模型</option>
+          <option value="spacefill">空间填充</option>
+        </select>
+        <button id="export-btn" class="player-btn export" title="录制当前播放为 webm 视频">● 导出视频</button>
+      </div>
+      <div id="hint" class="hint">输入序列并点击「生成折叠动画」后,此处将显示结构viewer与播放控制。</div>
+    </section>
+  </main>
+
+  <footer>
+    动画为<b>物理引导示意</b>(AMBER14SB + GBn2 隐式溶剂,外力引导形变 + 终点松弛),
+    并非真实折叠动力学路径 · 仅限内部演示用途
+  </footer>
+
+  <script src="/vendor/molstar/molstar.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
