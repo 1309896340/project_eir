@@ -70,6 +70,13 @@
 
     <section id="viewport-wrap">
       <div id="viewport"></div>
+      <div id="export-overlay" class="export-overlay" hidden>
+        <div class="export-card">
+          <div class="export-title">正在静默导出视频(webm)</div>
+          <div class="progress-track"><div id="export-bar"></div></div>
+          <div id="export-msg" class="muted">0 / 0</div>
+        </div>
+      </div>
       <div id="player" hidden>
         <button id="play-btn" class="player-btn" title="播放/暂停">▶</button>
         <input id="frame-slider" type="range" min="0" max="0" value="0" step="1">

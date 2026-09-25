@@ -13,7 +13,8 @@ const state = {
   acc: 0,
   key: null,
   meta: null,
-  recording: null,      // MediaRecorder 会话
+  exporting: false,     // 静默导出进行中
+  exportAbort: false,   // 用户请求取消
   frameCenters: [],     // 每帧几何中心缓存(轨迹坐标)
   gridReprRefs: null,   // 网格结构的 representation refs(样式切换时跳过)
   gridStructureRef: null, // 网格结构在 hierarchy 中的 cell ref(中心计算时跳过)
@@ -326,10 +327,12 @@ function tick(t) {
 requestAnimationFrame(tick);
 
 $("play-btn").onclick = () => {
+  if (state.exporting) return;  // 导出期间禁止播放
   state.playing = !state.playing;
   $("play-btn").textContent = state.playing ? "⏸" : "▶";
 };
 $("frame-slider").oninput = (e) => {
+  if (state.exporting) return;  // 导出期间禁止拖动
   state.playing = false;
   $("play-btn").textContent = "▶";
   setFrame(Number(e.target.value));
@@ -465,55 +468,114 @@ $("reset-btn").onclick = () => {
 
 
 $("export-btn").onclick = () => {
-  if (state.recording) { stopRecording(); return; }
-  startRecording();
+  if (state.exporting) { state.exportAbort = true; return; }
+  exportVideo();
 };
 
 function getRenderCanvas() {
   // Mol* 5.11 的 canvas 挂在 canvas3d.webgl.gl.canvas 上;DOM 查询作回退
   const c3d = state.plugin && state.plugin.canvas3d;
-  const viaPlugin = c3d && c3d.webgl && c3d.webgl.gl && c3d.webgl.gl.canvas;
+  const viaPlugin = c3d && c3d.webgl && c3d.webgl && c3d.webgl.gl && c3d.webgl.gl.canvas;
   return viaPlugin instanceof HTMLCanvasElement
     ? viaPlugin
     : document.querySelector("#viewport canvas");
 }
 
-function startRecording() {
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+// 三重 rAF:等待 Mol* requestDraw 之后的合成完成,确保快照的是新帧
+const nextPaint = () =>
+  new Promise((r) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => requestAnimationFrame(r))
+    )
+  );
+
+// 静默导出:不播放预览,逐帧 set -> 渲染 -> requestFrame 推入流。
+// captureStream(0) 手动帧模式保证"生成多少帧导出多少帧,不多不少";
+// 节拍按所选帧率补偿,渲染慢于帧间隔时以渲染耗时为准(帧数仍精确)。
+async function exportVideo() {
   const canvas = getRenderCanvas();
   if (!canvas || !canvas.captureStream || typeof MediaRecorder === "undefined") {
     alert("当前浏览器不支持画布录制(MediaRecorder/captureStream)");
     return;
   }
-  const stream = canvas.captureStream(Number($("speed-sel").value));
+  if (!state.frameCell || !state.frameCount) {
+    alert("尚未加载动画结果,无法导出");
+    return;
+  }
+  const fps = Number($("speed-sel").value);
   const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
     ? "video/webm;codecs=vp9" : "video/webm";
-  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+  const stream = canvas.captureStream(0);  // 手动帧模式
+  const track = stream.getVideoTracks()[0];
+  if (!track || typeof track.requestFrame !== "function") {
+    alert("当前浏览器不支持手动推帧(requestFrame),无法精确导出");
+    stream.getTracks().forEach((t) => t.stop());
+    return;
+  }
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
   const chunks = [];
-  recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `folding_${state.key || "traj"}.webm`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-  state.recording = recorder;
-  recorder.start();
-  $("export-btn").classList.add("recording");
-  $("export-btn").textContent = "■ 停止录制";
-  // 从头播放一遍
-  state.playing = false;
-  setFrame(0).then(() => { state.playing = true; $("play-btn").textContent = "⏸"; });
-}
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
 
-function stopRecording() {
-  if (!state.recording) return;
-  state.recording.stop();
-  state.recording = null;
-  $("export-btn").classList.remove("recording");
-  $("export-btn").textContent = "● 导出视频";
+  const N = state.frameCount;
+  const startFrame = state.currentFrame;
+  state.exporting = true;
+  state.exportAbort = false;
+  state.playing = false;
+  $("play-btn").textContent = "▶";
+  const btn = $("export-btn");
+  const overlay = $("export-overlay"), bar = $("export-bar"), msg = $("export-msg");
+  btn.classList.add("recording");
+  btn.textContent = "✕ 取消导出";
+  overlay.hidden = false;
+  bar.style.width = "0%";
+  msg.textContent = `准备导出 ${N} 帧 @ ${fps} 帧/秒`;
+
+  const finish = (ok) => {
+    state.exporting = false;
+    overlay.hidden = true;
+    btn.classList.remove("recording");
+    btn.textContent = "● 导出视频";
+    if (ok) {
+      rec.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `folding_${state.key || "traj"}.webm`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      };
+      rec.stop();
+    } else {
+      rec.onstop = null;
+      chunks.length = 0;
+      try { rec.stop(); } catch (e) { /* 忽略中止异常 */ }
+    }
+    setFrame(startFrame);
+  };
+
+  rec.start();
+  const interval = 1000 / fps;
+  const t0 = performance.now();
+  try {
+    for (let i = 0; i < N; i++) {
+      if (state.exportAbort) { finish(false); return; }
+      await setFrame(i);
+      state.plugin.canvas3d.requestDraw();
+      await nextPaint();
+      track.requestFrame();  // 恰好一帧
+      bar.style.width = `${Math.round(((i + 1) / N) * 100)}%`;
+      msg.textContent = `导出中:第 ${i + 1} / ${N} 帧`;
+      const wait = t0 + (i + 1) * interval - performance.now();
+      if (wait > 0) await sleepMs(wait);
+    }
+    await sleepMs(Math.max(interval, 150));  // 收尾,确保末帧完整入流
+    finish(true);
+  } catch (e) {
+    console.error("导出失败:", e);
+    finish(false);
+  }
 }
 
 // ---------------- 启动 ----------------
