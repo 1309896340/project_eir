@@ -9,6 +9,7 @@
 
 import logging
 from pathlib import Path
+from typing import cast
 
 import torch
 from transformers import AutoTokenizer, BigBirdForMaskedLM
@@ -16,6 +17,7 @@ from transformers import AutoTokenizer, BigBirdForMaskedLM
 from CodonTransformer.CodonData import get_amino_acid_sequence
 from CodonTransformer.CodonEvaluation import get_GC_content
 from CodonTransformer.CodonPrediction import predict_dna_sequence
+from CodonTransformer.CodonUtils import DNASequencePrediction
 
 
 class _DropGenerativeCapabilityWarning(logging.Filter):
@@ -40,24 +42,33 @@ def main() -> None:
     print(f"device: {device} ({torch.cuda.get_device_name(0) if device.type == 'cuda' else 'CPU'})")
 
     tokenizer = AutoTokenizer.from_pretrained(str(source))
-    model = BigBirdForMaskedLM.from_pretrained(str(source)).to(device).eval()
+    model = cast(
+        "torch.nn.Module", BigBirdForMaskedLM.from_pretrained(str(source))
+    )
+    model.to(device)
+    model.eval()
 
     # 1) 确定性解码:全局最优的单条设计(match_protein=True 强制同义约束,
     #    实现为非同义密码子 logits 置 -inf,与设计文档的硬约束方案一致)
-    output = predict_dna_sequence(
-        protein=PROTEIN,
-        organism=ORGANISM,
-        device=device,
-        tokenizer=tokenizer,
-        model=model,
-        attention_type="original_full",
-        deterministic=True,
-        match_protein=True,
+    # deterministic=True + num_sequences=1 时运行时返回单条预测
+    output = cast(
+        "DNASequencePrediction",
+        predict_dna_sequence(
+            protein=PROTEIN,
+            organism=ORGANISM,
+            device=device,
+            tokenizer=tokenizer,
+            model=model,
+            attention_type="original_full",
+            deterministic=True,
+            match_protein=True,
+        ),
     )
     dna = output.predicted_dna
 
     # 翻译一致性校验(蛋白序列一致为硬约束)
-    translated = get_amino_acid_sequence(dna, stop_symbol="", codon_table=1)
+    # 注:return_correct_seq=False 时运行时返回 str,但库注解为宽联合类型
+    translated = cast("str", get_amino_acid_sequence(dna, stop_symbol="", codon_table=1))
     assert translated.rstrip("_") == PROTEIN, "翻译产物与输入蛋白不一致!"
 
     print(f"\norganism:      {output.organism}")
@@ -68,6 +79,7 @@ def main() -> None:
     print(f"translate ok:  {translated == PROTEIN}")
 
     # 2) 非确定性采样:同义变体候选(用于后续多目标打分/主动学习)
+    # num_sequences=3 时运行时返回 List[DNASequencePrediction]
     variants = predict_dna_sequence(
         protein=PROTEIN,
         organism=ORGANISM,
@@ -81,9 +93,10 @@ def main() -> None:
         num_sequences=3,
         match_protein=True,
     )
-    print(f"\nsampled {len(variants)} synonymous variants (temperature=0.5):")
+    variant_list = cast("list[DNASequencePrediction]", variants)
+    print(f"\nsampled {len(variant_list)} synonymous variants (temperature=0.5):")
     seen = {dna}
-    for i, v in enumerate(variants, 1):
+    for i, v in enumerate(variant_list, 1):
         tag = "" if v.predicted_dna not in seen else " (dup)"
         seen.add(v.predicted_dna)
         print(f"  variant {i}: GC={get_GC_content(v.predicted_dna):.1f}%{tag}")

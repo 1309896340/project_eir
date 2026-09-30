@@ -15,6 +15,24 @@
                 "uriFormat": "%s",
                 "action": "openExternally"
             }
+        },
+        {
+            "name": "ProteinFolding 折叠动画 (FastAPI :7861)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "ProteinFolding.app",
+            "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PROTEINFOLDING_NO_BROWSER": "1"
+            },
+            "serverReadyAction": {
+                "pattern": "服务启动: (https?://\\S+)",
+                "uriFormat": "%s",
+                "action": "openExternally"
+            }
         }
     ]
 }
