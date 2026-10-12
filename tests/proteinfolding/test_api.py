@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from typing import Any
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).parents[2]))
+from fastapi.testclient import TestClient
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from ProteinFolding import app as app_module  # noqa: E402
+from proteinfolding import app as app_module
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ubq20.pdb"
 SEQ = "MQIFVKTLTGKTITLEVEPSDTIENVKAKIQDKEGIPPDQQRLIFAGKQLEDGRT"

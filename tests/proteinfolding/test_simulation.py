@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parents[2]))
-
-from ProteinFolding.core.config import SimParams, resolve_params  # noqa: E402
-from ProteinFolding.core.linear import make_linear_pdb  # noqa: E402
-from ProteinFolding.core.simulation import (  # noqa: E402
+from proteinfolding.core.config import SimParams, resolve_params
+from proteinfolding.core.linear import make_linear_pdb
+from proteinfolding.core.simulation import (
     choose_platform,
     run_targeted_md,
 )

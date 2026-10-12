@@ -1,9 +1,9 @@
 """命令行端到端:不启动浏览器,直接跑完 预测→线性化→模拟 并落盘。
 
 示例:
-    uv run python -m ProteinFolding.demo --sample ins --preset standard
-    uv run python -m ProteinFolding.demo --native-pdb path/to/structure.pdb
-    uv run python -m ProteinFolding.demo --sequence-file protein.fa --preset fast
+    uv run python -m proteinfolding.demo --sample ins --preset standard
+    uv run python -m proteinfolding.demo --native-pdb path/to/structure.pdb
+    uv run python -m proteinfolding.demo --sequence-file protein.fa --preset fast
 """
 
 from __future__ import annotations

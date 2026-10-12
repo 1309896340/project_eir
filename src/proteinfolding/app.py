@@ -1,7 +1,7 @@
 """ProteinFolding 本地服务入口:FastAPI 后端 + Mol* 前端。
 
 运行:
-    uv run python -m ProteinFolding.app
+    uv run python -m proteinfolding.app    # 或:uv run folding-app
 浏览器自动打开 http://127.0.0.1:7861 。单任务串行执行(MD 为重计算),
 新任务排队;结果按 序列+参数 缓存,重复提交瞬时返回。
 """

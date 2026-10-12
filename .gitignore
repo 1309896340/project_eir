@@ -38,12 +38,12 @@ dist/
 !/data/**/MD5SUMS
 
 # Downloaded CodonTransformer weights/tokenizer files; keep its code and docs.
-/CodonTransformer/data/
+/src/codon_transformer/data/
 
 # ProteinFolding: local ESM3 weights, result cache, downloaded samples, CLI output.
 # The vendored Mol* build under frontend/vendor/ IS tracked (self-contained offline frontend).
-/ProteinFolding/data/
-/ProteinFolding/output/
+/src/proteinfolding/data/
+/src/proteinfolding/output/
 
 # Model weights, checkpoints, and experiment output
 *.ckpt

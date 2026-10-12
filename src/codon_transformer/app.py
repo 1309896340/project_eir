@@ -1,7 +1,7 @@
 """CodonTransformer 调试界面:蛋白序列 -> 宿主特异优化 CDS。
 
 运行(需先 `uv sync`,权重从同目录 `data/` 加载):
-    uv run python CodonTransformer/codontransformer_app.py
+    uv run python -m codon_transformer.app    # 或:uv run codon-app
 浏览器自动打开 http://127.0.0.1:7860
 
 测试样例取自 GENCODE v50 人类蛋白(INS/HBB/EPO)。
@@ -79,7 +79,7 @@ def optimize(protein: str, organism: str, mode: str, temperature: float,
     )
 
     variants_info = ""
-    variant_rows: list[list] = []
+    variant_rows: list[list[str | int]] = []
     if mode == "采样(多条变体)":
         t1 = time.perf_counter()
         variants = predict_dna_sequence(
@@ -169,5 +169,9 @@ def build_ui() -> gr.Blocks:
     return demo
 
 
-if __name__ == "__main__":
+def main() -> None:
     build_ui().launch(server_name="127.0.0.1", server_port=7860, inbrowser=True)
+
+
+if __name__ == "__main__":
+    main()

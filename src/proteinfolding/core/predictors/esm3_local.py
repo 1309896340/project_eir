@@ -1,6 +1,6 @@
 """本地 ESM3 (esm3-sm-open-v1) 结构预测器。
 
-权重由用户手动下载到 ProteinFolding/data/esm3/(目录结构与 HF 仓库一致),
+权重由用户手动下载到 src/proteinfolding/data/esm3/(目录结构与 HF 仓库一致),
 运行时通过补丁把 esm SDK 的 data_root 指向该目录,避免触发
 huggingface_hub 联网下载(见 CodonTransformer 的同类先例)。
 """

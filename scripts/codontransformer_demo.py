@@ -3,7 +3,7 @@
 运行(需先 `uv sync`):
     uv run python scripts/codontransformer_demo.py
 
-权重优先从本地 `CodonTransformer/data/` 加载(已下载),否则回退 HuggingFace。
+权重优先从本地 `src/codon_transformer/data/` 加载(已下载),否则回退 HuggingFace。
 输出为 DNA(T),同时按项目约定给出 RNA(U)版本。
 """
 
@@ -21,7 +21,7 @@ from CodonTransformer.CodonUtils import DNASequencePrediction
 
 
 class _DropGenerativeCapabilityWarning(logging.Filter):
-    """丢弃 transformers 的 "has generative capabilities" 误报(详见 codontransformer_app.py)。"""
+    """丢弃 transformers 的 "has generative capabilities" 误报(详见 codon_transformer/app.py)。"""
 
     def filter(self, record: logging.LogRecord) -> bool:
         return "has generative capabilities" not in record.getMessage()
@@ -31,7 +31,7 @@ logging.getLogger("transformers.modeling_utils").addFilter(_DropGenerativeCapabi
 
 PROTEIN = "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLA"
 ORGANISM = "Homo sapiens"
-MODEL_DIR = Path(__file__).resolve().parent.parent / "CodonTransformer" / "data"
+MODEL_DIR = Path(__file__).resolve().parent.parent / "src" / "codon_transformer" / "data"
 MODEL_ID = "adibvafa/CodonTransformer"
 
 

@@ -5,17 +5,14 @@ fixture ubq20.pdb:泛素(1UBQ)前 20 个残基的重原子子集。
 
 from __future__ import annotations
 
-import sys
 import unittest
 from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).parents[2]))
-
-from ProteinFolding.core.cache import cache_key, find_cached  # noqa: E402
-from ProteinFolding.core.config import SimParams  # noqa: E402
-from ProteinFolding.core.linear import FloatArray, make_linear_pdb  # noqa: E402
+from proteinfolding.core.cache import cache_key, find_cached
+from proteinfolding.core.config import SimParams
+from proteinfolding.core.linear import FloatArray, make_linear_pdb
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ubq20.pdb"
 
