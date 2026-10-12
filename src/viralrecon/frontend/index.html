@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ViralRecon 演示 · 病毒测序分析流水线</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="title-block">
+      <h1>ViralRecon 演示台</h1>
+      <p class="subtitle">
+        FASTQ → 质控 → 比对 → 变异检测 → 共有序列 · 概念复刻
+        <a href="https://github.com/nf-core/viralrecon" target="_blank" rel="noopener">nf-core/viralrecon</a>
+      </p>
+      <p class="disclaimer">
+        教学演示:基因组与 reads 全部为<b>合成模拟数据</b>(种子可复现),不涉及真实病原体序列;
+        各步骤的简化实现对应右侧标注的真实工具。生产分析请使用真实 viralrecon 流程。
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ 参数面板 ============ -->
+    <section class="panel" id="setup">
+      <h2>1 · 数据与参数</h2>
+      <div class="preset-row" id="preset-row"></div>
+      <details id="advanced">
+        <summary>高级参数(留空用预设默认)</summary>
+        <div class="adv-grid" id="adv-grid"></div>
+      </details>
+      <div class="run-row">
+        <label class="seed-label">随机种子
+          <input type="number" id="seed-input" placeholder="默认 42">
+        </label>
+        <button id="run-btn" class="primary">▶ 生成分析报告</button>
+      </div>
+      <p class="hint" id="setup-hint"></p>
+    </section>
+
+    <!-- ============ 报告 ============ -->
+    <section id="report" hidden>
+      <h2>2 · 分析报告 <span class="muted" id="report-meta"></span></h2>
+
+      <!-- 流程条 -->
+      <div class="pipeline-strip" id="pipeline-strip"></div>
+
+      <!-- Summary 卡片 -->
+      <div class="cards" id="summary-cards"></div>
+
+      <!-- 真值对照 -->
+      <div class="panel truth-panel">
+        <h3>变异检出 vs 注入真值</h3>
+        <div class="cards small" id="truth-cards"></div>
+        <p class="hint">演示的独有优势:模拟时已知全部"真值"变异,可直观看到
+          depth / 质量 / 频率过滤的灵敏度与特异性(真实流程无真值,靠验证集评估)。</p>
+      </div>
+
+      <!-- 图表 -->
+      <div class="charts">
+        <div class="panel chart-panel">
+          <h3>Per-cycle 测序质量 <span class="tool-tag">FastQC</span></h3>
+          <canvas id="quality-chart" height="240"></canvas>
+          <p class="hint">Illumina 特征:read 前端质量高、末端线性衰减;
+            四分位带反映波动,低质量 reads 拉宽分布。纵轴为 Phred Q。</p>
+        </div>
+        <div class="panel chart-panel">
+          <h3>GC 含量分布 <span class="tool-tag">FastQC</span></h3>
+          <canvas id="gc-chart" height="240"></canvas>
+          <p class="hint">每条 read 的 GC 百分比直方图;合成基因组目标 GC ≈ 38%。</p>
+        </div>
+      </div>
+      <div class="panel chart-panel">
+        <h3>基因组覆盖深度 <span class="tool-tag">samtools · mpileup</span></h3>
+        <canvas id="depth-chart" height="220"></canvas>
+        <p class="hint" id="depth-hint"></p>
+      </div>
+
+      <!-- 变异表 -->
+      <div class="panel">
+        <div class="table-head">
+          <h3>变异位点 <span class="tool-tag">ivar variants</span></h3>
+          <div class="table-actions">
+            <select id="variant-filter">
+              <option value="all">全部</option>
+              <option value="PASS" selected>仅 PASS</option>
+              <option value="filtered">仅被过滤</option>
+            </select>
+            <button id="download-tsv">下载 TSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="variant-table">
+            <thead>
+              <tr>
+                <th>POS</th><th>类型</th><th>REF</th><th>ALT</th>
+                <th>DP</th><th>AF</th><th>QUAL</th><th>FILTER</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="hint">过滤规则与 ivar 默认一致:DP&lt;10 → LOW_DEPTH,
+          QUAL&lt;20 → LOW_QUAL,AF&lt;0.75 → LOW_FREQ。POS 为 1-based。</p>
+      </div>
+
+      <!-- Consensus -->
+      <div class="panel">
+        <div class="table-head">
+          <h3>共有序列 <span class="tool-tag">ivar consensus</span></h3>
+          <button id="download-fasta">下载 FASTA</button>
+        </div>
+        <div class="cards small" id="consensus-cards"></div>
+        <p class="hint">多数碱基占比 ≥ 0.75 才调用,否则写 N;
+          高频缺失位从共识移除、高频插入按众数串补回,故长度可不同于参考。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>模拟口径:测序错误概率与 Phred 质量自洽(p=10<sup>−Q/10</sup>);
+      比对为理想化定位(真实流程用 bowtie2);变异/共识阈值复刻 ivar 默认。</p>
+    <p>真实流程运行指引见 <code>src/viralrecon/docs/环境安装交接.md</code>。</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
